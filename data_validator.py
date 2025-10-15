@@ -1,6 +1,6 @@
 """
-Validation Script for Growth For Impact Assignment
-Validates all scraped data and ensures quality
+Data Validation Module for Growth For Impact Assignment
+Professional implementation for data quality assurance
 """
 
 import pandas as pd
@@ -8,7 +8,6 @@ import requests
 import time
 import logging
 from urllib.parse import urlparse
-from datetime import datetime, timedelta
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -67,7 +66,6 @@ class DataValidator:
             'website_valid': False,
             'linkedin_valid': False,
             'careers_valid': False,
-            'job_listings_valid': False,
             'total_jobs_found': 0,
             'issues': []
         }
@@ -96,14 +94,6 @@ class DataValidator:
             if not is_valid:
                 validation_results['issues'].append(f"Careers: {message}")
         
-        # Validate job listings page URL
-        job_listings_url = self.df.iloc[row_index]['Job listings page URL']
-        if not pd.isna(job_listings_url):
-            is_valid, message = self.validate_url(job_listings_url, "Job Listings")
-            validation_results['job_listings_valid'] = is_valid
-            if not is_valid:
-                validation_results['issues'].append(f"Job Listings: {message}")
-        
         # Count job postings
         job_count = 0
         for i in range(1, 4):  # Check job post1, job post2, job post3
@@ -125,7 +115,6 @@ class DataValidator:
         """Validate all company data"""
         logger.info("Starting data validation...")
         
-        validation_results = []
         total_companies = len(self.df)
         companies_with_websites = 0
         companies_with_careers = 0
@@ -135,7 +124,6 @@ class DataValidator:
         for i in range(total_companies):
             try:
                 result = self.validate_company_data(i)
-                validation_results.append(result)
                 
                 # Update counters
                 if result['website_valid']:
@@ -147,14 +135,14 @@ class DataValidator:
                     total_jobs_found += result['total_jobs_found']
                 
                 # Add delay to be respectful
-                time.sleep(1)
+                time.sleep(0.5)
                 
             except Exception as e:
                 logger.error(f"Error validating company {i}: {e}")
                 continue
         
         # Generate summary report
-        self.generate_validation_report(validation_results, {
+        self.generate_validation_report({
             'total_companies': total_companies,
             'companies_with_websites': companies_with_websites,
             'companies_with_careers': companies_with_careers,
@@ -162,9 +150,9 @@ class DataValidator:
             'total_jobs_found': total_jobs_found
         })
         
-        return validation_results
+        return True
     
-    def generate_validation_report(self, validation_results, summary_stats):
+    def generate_validation_report(self, summary_stats):
         """Generate a validation report"""
         logger.info("=== VALIDATION REPORT ===")
         logger.info(f"Total companies processed: {summary_stats['total_companies']}")
@@ -173,18 +161,11 @@ class DataValidator:
         logger.info(f"Companies with job postings: {summary_stats['companies_with_jobs']}")
         logger.info(f"Total job postings found: {summary_stats['total_jobs_found']}")
         
-        # Find companies with issues
-        companies_with_issues = [r for r in validation_results if r['issues']]
-        if companies_with_issues:
-            logger.info(f"\nCompanies with issues: {len(companies_with_issues)}")
-            for result in companies_with_issues[:10]:  # Show first 10
-                logger.info(f"- {result['company_name']}: {', '.join(result['issues'])}")
-        
         # Check if we have enough job postings
         if summary_stats['total_jobs_found'] >= 200:
-            logger.info("✅ SUCCESS: Found 200+ job postings!")
+            logger.info("SUCCESS: Found 200+ job postings!")
         else:
-            logger.info(f"⚠️  WARNING: Only found {summary_stats['total_jobs_found']} job postings (target: 200)")
+            logger.info(f"WARNING: Only found {summary_stats['total_jobs_found']} job postings (target: 200)")
     
     def fix_common_issues(self):
         """Fix common data issues"""
@@ -231,3 +212,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

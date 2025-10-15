@@ -1,6 +1,6 @@
 """
-Main Runner Script for Growth For Impact Assignment
-Runs the complete data enrichment and job scraping process
+Main Execution Script for Growth For Impact Assignment
+Professional implementation for complete data enrichment and job scraping
 """
 
 import os
@@ -9,12 +9,10 @@ import logging
 import time
 from datetime import datetime
 
-# Add scripts directory to path
-sys.path.append(os.path.join(os.path.dirname(__file__), 'scripts'))
-
-from data_enrichment import CompanyDataEnricher
-from job_scraping import JobScraper
-from validation import DataValidator
+# Import our modules
+from data_enrichment import DataEnricher
+from job_scraper import JobScraper
+from data_validator import DataValidator
 
 # Set up logging
 logging.basicConfig(
@@ -75,11 +73,11 @@ class AssignmentRunner:
         """Run data enrichment process"""
         logger.info("Starting data enrichment...")
         
-        enricher = CompanyDataEnricher(self.excel_file)
+        enricher = DataEnricher(self.excel_file)
         
         if enricher.load_data():
-            # Process companies in batches to avoid overwhelming servers
-            batch_size = 20
+            # Process companies in batches
+            batch_size = 25
             total_companies = len(enricher.df)
             
             for start_idx in range(0, total_companies, batch_size):
@@ -104,9 +102,9 @@ class AssignmentRunner:
         
         scraper = JobScraper(self.excel_file)
         
-        if scraper.load_data() and scraper.setup_driver():
+        if scraper.load_data():
             # Process companies in smaller batches for job scraping
-            batch_size = 10
+            batch_size = 15
             total_companies = len(scraper.df)
             
             for start_idx in range(0, total_companies, batch_size):
@@ -121,10 +119,9 @@ class AssignmentRunner:
                     logger.info("Waiting 60 seconds before next batch...")
                     time.sleep(60)
             
-            scraper.close_driver()
             logger.info("Job scraping completed")
         else:
-            logger.error("Failed to load data or setup driver for job scraping")
+            logger.error("Failed to load data for job scraping")
     
     def run_data_validation(self):
         """Run data validation process"""
@@ -134,7 +131,7 @@ class AssignmentRunner:
         
         if validator.load_data():
             validator.fix_common_issues()
-            validation_results = validator.validate_all_data()
+            validator.validate_all_data()
             logger.info("Data validation completed")
         else:
             logger.error("Failed to load data for validation")
@@ -215,3 +212,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
