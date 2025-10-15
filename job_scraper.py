@@ -239,15 +239,15 @@ class JobScraper:
             return []
     
     def scrape_custom_jobs(self, careers_url, max_jobs=3):
-        """Scrape jobs from custom career pages with aggressive detection"""
+        """Scrape jobs from custom career pages with aggressive detection and job descriptions"""
         try:
             response = self.session.get(careers_url, timeout=10)
             if response.status_code != 200:
                 return []
-            
+
             soup = BeautifulSoup(response.content, 'html.parser')
             jobs = []
-            
+
             # Much more aggressive job detection with many more selectors
             job_selectors = [
                 # Common job listing patterns
@@ -256,30 +256,30 @@ class JobScraper:
                 'article.job', 'article.job-listing', 'article.career-item',
                 'div[class*="job"]', 'div[class*="career"]', 'div[class*="position"]',
                 'div[class*="opening"]', 'div[class*="vacancy"]', 'div[class*="role"]',
-                
+
                 # More specific patterns
                 'div.job-card', 'div.job-item', 'div.job-post', 'div.job-opening',
                 'div.career-card', 'div.career-item', 'div.career-post',
                 'div.position-card', 'div.position-item', 'div.position-post',
                 'div.opportunity', 'div.opportunity-card', 'div.opportunity-item',
-                
+
                 # List patterns
                 'li[class*="job"]', 'li[class*="career"]', 'li[class*="position"]',
                 'li[class*="opening"]', 'li[class*="vacancy"]', 'li[class*="role"]',
-                
+
                 # Table patterns
                 'tr[class*="job"]', 'tr[class*="career"]', 'tr[class*="position"]',
                 'td[class*="job"]', 'td[class*="career"]', 'td[class*="position"]',
-                
+
                 # Generic patterns that might contain jobs
                 'div[class*="list"]', 'div[class*="item"]', 'div[class*="card"]',
                 'div[class*="post"]', 'div[class*="entry"]', 'div[class*="content"]',
-                
+
                 # Look for any div with job-related text
                 'div:contains("job")', 'div:contains("career")', 'div:contains("position")',
                 'div:contains("opening")', 'div:contains("vacancy")', 'div:contains("role")'
             ]
-            
+
             job_elements = []
             for selector in job_selectors:
                 try:
@@ -291,14 +291,14 @@ class JobScraper:
                             text_content = elem.get_text().lower()
                             if any(keyword in text_content for keyword in ['job', 'career', 'position', 'opening', 'vacancy', 'role', 'apply', 'hiring']):
                                 filtered_elements.append(elem)
-                        
+
                         if filtered_elements:
                             job_elements = filtered_elements
                             logger.info(f"Found {len(job_elements)} potential job elements with selector: {selector}")
                             break
                 except:
                     continue
-            
+
             # If no specific selectors work, try to find any links that might be jobs
             if not job_elements:
                 all_links = soup.find_all('a', href=True)
@@ -309,17 +309,18 @@ class JobScraper:
                     if (any(keyword in link_text for keyword in ['job', 'career', 'position', 'opening', 'vacancy', 'role', 'apply']) or
                         any(keyword in link_href for keyword in ['job', 'career', 'position', 'opening', 'vacancy', 'role'])):
                         job_links.append(link)
-                
+
                 if job_links:
                     logger.info(f"Found {len(job_links)} potential job links")
                     job_elements = job_links[:max_jobs]
-            
+
             for i, job_element in enumerate(job_elements[:max_jobs]):
                 try:
                     # Get job title and URL
                     job_title = ""
                     job_url = ""
-                    
+                    job_description = ""
+
                     # Try different ways to get title and URL
                     if job_element.name == 'a':
                         job_title = job_element.get_text(strip=True)
@@ -334,21 +335,24 @@ class JobScraper:
                             # Try to get title from text content
                             job_title = job_element.get_text(strip=True)
                             job_url = careers_url
-                    
+
                     # Clean up title
                     if job_title:
                         job_title = re.sub(r'\s+', ' ', job_title).strip()
                         # Remove common prefixes/suffixes
                         job_title = re.sub(r'^(job|career|position|opening|vacancy|role):\s*', '', job_title, flags=re.IGNORECASE)
                         job_title = re.sub(r'\s*(job|career|position|opening|vacancy|role)$', '', job_title, flags=re.IGNORECASE)
-                    
+
                     if not job_title or len(job_title) < 3:
                         continue
-                    
+
                     # Make URL absolute
                     if job_url and not job_url.startswith('http'):
                         job_url = urljoin(careers_url, job_url)
-                    
+
+                    # Get job description from the element
+                    job_description = self.extract_job_description(job_element, job_url)
+
                     # Get job location
                     job_location = "Not specified"
                     location_text = job_element.get_text()
@@ -359,30 +363,95 @@ class JobScraper:
                         r'([A-Z][a-z]+,\s*[A-Z]{2})',  # City, State pattern
                         r'([A-Z][a-z]+,\s*[A-Z][a-z]+)'  # City, Country pattern
                     ]
-                    
+
                     for pattern in location_patterns:
                         location_match = re.search(pattern, location_text, re.IGNORECASE)
                         if location_match:
                             job_location = location_match.group(1)
                             break
-                    
+
                     jobs.append({
                         'title': job_title,
                         'url': job_url,
                         'location': job_location,
-                        'date': "Recent"
+                        'date': "Recent",
+                        'description': job_description
                     })
-                    
+
                 except Exception as e:
                     logger.warning(f"Error scraping custom job {i}: {e}")
                     continue
-            
+
             logger.info(f"Scraped {len(jobs)} jobs from custom page")
             return jobs
-            
+
         except Exception as e:
             logger.error(f"Error scraping custom jobs: {e}")
             return []
+    
+    def extract_job_description(self, job_element, job_url):
+        """Extract job description from job element or job URL"""
+        try:
+            # First try to get description from the job element itself
+            description_text = ""
+            
+            # Look for description in common elements
+            desc_selectors = [
+                'div.description', 'div.job-description', 'div.content',
+                'p.description', 'span.description', 'div.details',
+                'div.requirements', 'div.responsibilities'
+            ]
+            
+            for selector in desc_selectors:
+                desc_elem = job_element.select_one(selector)
+                if desc_elem:
+                    description_text = desc_elem.get_text(strip=True)
+                    if len(description_text) > 50:  # Only use if substantial content
+                        break
+            
+            # If no description found in element, try to fetch from job URL
+            if not description_text and job_url and job_url != job_element.get('href', ''):
+                try:
+                    job_response = self.session.get(job_url, timeout=5)
+                    if job_response.status_code == 200:
+                        job_soup = BeautifulSoup(job_response.content, 'html.parser')
+                        
+                        # Try multiple selectors for job description
+                        desc_selectors = [
+                            'div.job-description', 'div.description', 'div.content',
+                            'div.job-details', 'div.requirements', 'div.responsibilities',
+                            'section.job-description', 'article.job-description',
+                            'div[class*="description"]', 'div[class*="content"]'
+                        ]
+                        
+                        for selector in desc_selectors:
+                            desc_elem = job_soup.select_one(selector)
+                            if desc_elem:
+                                description_text = desc_elem.get_text(strip=True)
+                                if len(description_text) > 50:
+                                    break
+                        
+                        # If still no description, get first few paragraphs
+                        if not description_text:
+                            paragraphs = job_soup.find_all('p')
+                            if paragraphs:
+                                description_text = ' '.join([p.get_text(strip=True) for p in paragraphs[:3]])
+                                
+                except Exception as e:
+                    logger.warning(f"Error fetching job description from {job_url}: {e}")
+            
+            # Clean up description
+            if description_text:
+                description_text = re.sub(r'\s+', ' ', description_text).strip()
+                # Limit to reasonable length
+                if len(description_text) > 500:
+                    description_text = description_text[:500] + "..."
+            
+            return description_text or "Description not available"
+            
+        except Exception as e:
+            logger.warning(f"Error extracting job description: {e}")
+            return "Description not available"
     
     def find_alternative_careers_urls(self, careers_url):
         """Find alternative career page URLs to try"""

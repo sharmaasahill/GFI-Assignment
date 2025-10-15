@@ -13,6 +13,7 @@ from datetime import datetime
 from data_enrichment import DataEnricher
 from job_scraper import JobScraper
 from data_validator import DataValidator
+from methodology_documentation import MethodologyDocumentation
 
 # Set up logging
 logging.basicConfig(
@@ -54,9 +55,16 @@ class AssignmentRunner:
             logger.info("="*50)
             self.run_data_validation()
             
-            # Step 4: Generate Final Report
+            # Step 4: Create Methodology Documentation
             logger.info("\n" + "="*50)
-            logger.info("STEP 4: FINAL REPORT")
+            logger.info("STEP 4: METHODOLOGY DOCUMENTATION")
+            logger.info("="*50)
+            methodology = MethodologyDocumentation(self.excel_file)
+            methodology.create_methodology_tab()
+            
+            # Step 5: Generate Final Report
+            logger.info("\n" + "="*50)
+            logger.info("STEP 5: FINAL REPORT")
             logger.info("="*50)
             self.generate_final_report()
             
@@ -202,10 +210,7 @@ def main():
     print("4. Generate final report")
     print("=" * 50)
     
-    response = input("\nDo you want to start the assignment? (y/n): ")
-    if response.lower() != 'y':
-        print("Assignment cancelled.")
-        return
+    print("\nStarting assignment automatically...")
     
     runner = AssignmentRunner()
     runner.run_complete_assignment()

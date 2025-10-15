@@ -194,22 +194,79 @@ class DataEnricher:
             'job listings', 'career center', 'human resources', 'hr',
             'talent', 'team', 'people', 'staff'
         ]
-        
+
         html_lower = html_content.lower()
         keyword_count = sum(1 for keyword in careers_keywords if keyword in html_lower)
-        
+
         # Also check for job-related HTML elements
         soup = BeautifulSoup(html_content, 'html.parser')
-        
+
         # Look for job-related elements
         job_elements = soup.find_all(['div', 'li', 'article'], class_=re.compile(r'job|career|position|opening|vacancy|role', re.I))
         job_links = soup.find_all('a', href=re.compile(r'job|career|position|opening|vacancy|role', re.I))
-        
+
         # If we find job-related elements or links, it's likely a careers page
         has_job_elements = len(job_elements) > 0 or len(job_links) > 0
-        
+
         # If we find at least 2 career-related keywords OR job elements, it's likely a careers page
         return keyword_count >= 2 or has_job_elements
+    
+    def is_job_listings_page(self, html_content, url):
+        """Check if the page is specifically a job listings page (not just careers page)"""
+        try:
+            soup = BeautifulSoup(html_content, 'html.parser')
+            html_lower = html_content.lower()
+            
+            # Strong indicators of job listings page
+            job_listing_indicators = [
+                'apply now', 'apply for this position', 'job description',
+                'requirements', 'responsibilities', 'qualifications',
+                'salary', 'benefits', 'full-time', 'part-time', 'contract',
+                'remote', 'hybrid', 'on-site', 'location', 'posted',
+                'job type', 'experience level', 'department'
+            ]
+            
+            # Count job listing indicators
+            indicator_count = sum(1 for indicator in job_listing_indicators if indicator in html_lower)
+            
+            # Look for specific job listing elements
+            job_listing_elements = soup.find_all(['div', 'li', 'article'], class_=re.compile(
+                r'job-listing|job-post|job-opening|position-listing|career-listing|vacancy', re.I))
+            
+            # Look for apply buttons/links
+            apply_links = soup.find_all('a', href=re.compile(r'apply|application', re.I))
+            apply_buttons = soup.find_all(['button', 'input'], value=re.compile(r'apply|submit', re.I))
+            
+            # Look for job titles (usually in h1, h2, h3 tags)
+            job_titles = soup.find_all(['h1', 'h2', 'h3'], string=re.compile(r'engineer|developer|manager|analyst|specialist|coordinator|director|lead', re.I))
+            
+            # Check for job platform indicators
+            platform_indicators = [
+                'lever.co', 'greenhouse.io', 'zohorecruit.com', 'workday.com',
+                'bamboohr.com', 'smartrecruiters.com', 'jobvite.com'
+            ]
+            
+            has_platform = any(platform in html_lower for platform in platform_indicators)
+            
+            # Scoring system
+            score = 0
+            if indicator_count >= 3:
+                score += 2
+            if len(job_listing_elements) > 0:
+                score += 2
+            if len(apply_links) > 0 or len(apply_buttons) > 0:
+                score += 2
+            if len(job_titles) > 0:
+                score += 1
+            if has_platform:
+                score += 3
+            
+            # If score is 4 or higher, it's likely a job listings page
+            return score >= 4
+            
+        except Exception as e:
+            logger.warning(f"Error checking job listings page: {e}")
+            return False
     
     def enrich_company_data(self, row_index):
         """Enrich data for a single company"""
